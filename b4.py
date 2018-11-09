@@ -30,9 +30,11 @@ def rnn_model(x):
 
     cell = tf.nn.rnn_cell.GRUCell(HIDDEN_SIZE)
     _, encoding = tf.nn.static_rnn(cell, word_list, dtype=tf.float32)
+    encoding = tf.layers.dropout(encoding)
 
     logits = tf.layers.dense(encoding, MAX_LABEL, activation=None)
     logits = tf.layers.dropout(logits)
+    # TODO: make sure that dropout is not applied on testing 
     return logits, word_list
 
 def data_read_words():
