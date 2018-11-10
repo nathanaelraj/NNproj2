@@ -13,8 +13,8 @@ MAX_LABEL = 15
 EMBEDDING_SIZE = 20
 
 
-batch_size = 5600
-no_epochs = 10
+batch_size = 128
+no_epochs = 100
 lr = 0.01
 
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -127,47 +127,49 @@ def main():
     loss = {}
     test_accs = {}
     #word_vectors is the vector representation of each id
-    tf.reset_default_graph()
-    x = tf.placeholder(tf.int64, [None, MAX_DOCUMENT_LENGTH])
-    y_ = tf.placeholder(tf.int64)
+    for method in [vanilla_model, lstm_model, twolayer_model]:
+        tf.reset_default_graph()
+        x = tf.placeholder(tf.int64, [None, MAX_DOCUMENT_LENGTH])
+        y_ = tf.placeholder(tf.int64)
+        m = str(method).split(' ')[1]
+        print(m)
+        logits, word_list = method(x)
+        entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
+        train_op = chooseTrainOp(False, entropy)
+        correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), y_ ), tf.float32)
+        accuracy = tf.reduce_mean(correct_prediction)
 
-    logits, word_list = twolayer_model(x)
-    entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
-    train_op = chooseTrainOp(True, entropy)
-    correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), y_ ), tf.float32)
-    accuracy = tf.reduce_mean(correct_prediction)
+        sess = tf.Session()
+        sess.run(tf.global_variables_initializer())
 
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
-    p = 0
-  # training
-    loss[p] = []
-    test_accs[p] = []
-    idx = np.arange(x_train.shape[0])
-    NUM_INPUT = x_train.shape[0]
-    repetition_in_one_epoch = int(NUM_INPUT / batch_size)
-    for e in range(no_epochs):
-        np.random.shuffle(idx)
-        x_train, y_train = x_train[idx], y_train[idx]
-        start = -1 * batch_size
-        end = 0
-        for k in range(repetition_in_one_epoch):
-            start += batch_size
-            end += batch_size
-            if end > NUM_INPUT:
-                end = NUM_INPUT
-            _, loss_  = sess.run([train_op, entropy], {x: x_train, y_: y_train})
-        loss[p].append(loss_)
-        acc = sess.run([accuracy], {x: x_test, y_: y_test})
-        test_accs[p].append(acc[0])
-        if e%1 == 0:
-            print('epoch: %d, entropy: %g'%(e, loss[p][e]), 'accuracy:', test_accs[p][e])
+      # training
+        loss[m] = []
+        test_accs[m] = []
+        idx = np.arange(x_train.shape[0])
+        NUM_INPUT = x_train.shape[0]
+        repetition_in_one_epoch = int(NUM_INPUT / batch_size)
+        for e in range(no_epochs):
+            np.random.shuffle(idx)
+            x_train, y_train = x_train[idx], y_train[idx]
+            start = -1 * batch_size
+            end = 0
+            for k in range(repetition_in_one_epoch):
+                start += batch_size
+                end += batch_size
+                if end > NUM_INPUT:
+                    end = NUM_INPUT
+                _, loss_  = sess.run([train_op, entropy], {x: x_train, y_: y_train})
+            loss[m].append(loss_)
+            acc = sess.run([accuracy], {x: x_test, y_: y_test})
+            test_accs[m].append(acc[0])
+            if e%10 == 0:
+                print('epoch: %d, entropy: %g'%(e, loss[m][e]), 'accuracy:', test_accs[m][e])
 
     print(loss)
     print(test_accs)
     for k,v in loss.items():
         plt.figure("Entropy Vs Epochs")
-        plt.plot(range(no_epochs), v, label= str(k) + ' dropout rate')
+        plt.plot(range(no_epochs), v, label= str(k) )
         plt.xlabel(str(no_epochs) + ' Epochs')
         plt.ylabel('Entropy')
     plt.legend()
@@ -175,7 +177,7 @@ def main():
 
     for k,v in test_accs.items():
         test_fig = plt.figure("Accuracy Vs Epochs")
-        plt.plot(range(no_epochs), v, label= str(k) + ' dropout rate')
+        plt.plot(range(no_epochs), v, label= str(k) )
         plt.xlabel(str(no_epochs) + ' Epochs')
         plt.ylabel('Accuracy')
     plt.legend()
