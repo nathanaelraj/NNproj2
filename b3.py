@@ -2,7 +2,7 @@ import numpy as np
 import pandas
 import tensorflow as tf
 import csv
-
+import time
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -84,7 +84,7 @@ def main():
 
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
-
+    start_time = time.time()
   # training
     loss = []
     test_accs = []
@@ -107,6 +107,8 @@ def main():
         test_accs.append(acc[0])
         if e%10 == 0:
             print('epoch: %d, entropy: %g'%(e, loss[e]), 'accuracy:', test_accs[e])
+    duration = time.time() - start_time
+    print('duration:', duration)
     sess.close()
     plt.figure("Entropy Vs Epochs")
     plt.plot(range(no_epochs), loss)

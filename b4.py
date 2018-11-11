@@ -2,7 +2,7 @@ import numpy as np
 import pandas
 import tensorflow as tf
 import csv
-
+import time
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -21,19 +21,18 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 seed = 10
 tf.set_random_seed(seed)
 
-def rnn_model(x,p):
-    with tf.variable_scope("foo" ):
-        word_vectors = tf.contrib.layers.embed_sequence(
-          x, vocab_size=n_words, embed_dim=EMBEDDING_SIZE)
+def rnn_model(x):
 
-        word_list = tf.unstack(word_vectors, axis=1)
+    word_vectors = tf.contrib.layers.embed_sequence(
+      x, vocab_size=n_words, embed_dim=EMBEDDING_SIZE)
 
-        cell = tf.nn.rnn_cell.GRUCell(HIDDEN_SIZE)
-        _, encoding = tf.nn.static_rnn(cell, word_list, dtype=tf.float32)
-        encoding = tf.layers.dropout(encoding, rate=p, training=True)
+    word_list = tf.unstack(word_vectors, axis=1)
 
-        logits = tf.layers.dense(encoding, MAX_LABEL, activation=None)
-        logits = tf.layers.dropout(logits, rate=p, training=True)
+    cell = tf.nn.rnn_cell.GRUCell(HIDDEN_SIZE)
+    _, encoding = tf.nn.static_rnn(cell, word_list, dtype=tf.float32)
+
+    logits = tf.layers.dense(encoding, MAX_LABEL, activation=None)
+
         # TODO: make sure that dropout is not applied on testing
     return logits, word_list
 
@@ -84,44 +83,46 @@ def main():
     loss = {}
     test_accs = {}
     #word_vectors is the vector representation of each id
-    for p in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
-        tf.reset_default_graph()
-        x = tf.placeholder(tf.int64, [None, MAX_DOCUMENT_LENGTH])
-        y_ = tf.placeholder(tf.int64)
-        prob = tf.placeholder(tf.float32)
-        logits, word_list = rnn_model(x,prob)
-        entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
-        train_op = tf.train.AdamOptimizer(lr).minimize(entropy)
+    p = 0
 
-        correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), y_ ), tf.float32)
-        accuracy = tf.reduce_mean(correct_prediction)
+    x = tf.placeholder(tf.int64, [None, MAX_DOCUMENT_LENGTH])
+    y_ = tf.placeholder(tf.int64)
 
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+    logits, word_list = rnn_model(x)
+    entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
+    train_op = tf.train.AdamOptimizer(lr).minimize(entropy)
 
-      # training
-        loss[p] = []
-        test_accs[p] = []
-        idx = np.arange(x_train.shape[0])
-        NUM_INPUT = x_train.shape[0]
-        repetition_in_one_epoch = int(NUM_INPUT / batch_size)
-        for e in range(no_epochs):
-            np.random.shuffle(idx)
-            x_train, y_train = x_train[idx], y_train[idx]
-            start = -1 * batch_size
-            end = 0
-            for k in range(repetition_in_one_epoch):
-                start += batch_size
-                end += batch_size
-                if end > NUM_INPUT:
-                    end = NUM_INPUT
-                word_list_, _, loss_  = sess.run([word_list, train_op, entropy], {x: x_train[start:end], y_: y_train[start:end], prob:p})
-            loss[p].append(loss_)
-            acc = sess.run([accuracy], {x: x_test, y_: y_test, prob:0.0 })
-            test_accs[p].append(acc[0])
-            if e%10 == 0:
-                print('epoch: %d, entropy: %g'%(e, loss[p][e]), 'accuracy:', test_accs[p][e])
+    correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), y_ ), tf.float32)
+    accuracy = tf.reduce_mean(correct_prediction)
 
+    sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
+    start_time = time.time()
+  # training
+    loss[p] = []
+    test_accs[p] = []
+    idx = np.arange(x_train.shape[0])
+    NUM_INPUT = x_train.shape[0]
+    repetition_in_one_epoch = int(NUM_INPUT / batch_size)
+    for e in range(no_epochs):
+        np.random.shuffle(idx)
+        x_train, y_train = x_train[idx], y_train[idx]
+        start = -1 * batch_size
+        end = 0
+        for k in range(repetition_in_one_epoch):
+            start += batch_size
+            end += batch_size
+            if end > NUM_INPUT:
+                end = NUM_INPUT
+            word_list_, _, loss_  = sess.run([word_list, train_op, entropy], {x: x_train[start:end], y_: y_train[start:end]})
+        loss[p].append(loss_)
+        acc = sess.run([accuracy], {x: x_test, y_: y_test })
+        test_accs[p].append(acc[0])
+        if e%10 == 0:
+            print('epoch: %d, entropy: %g'%(e, loss[p][e]), 'accuracy:', test_accs[p][e])
+
+    duration = time.time() - start_time
+    print('duration:', duration)
     print(loss)
     print(test_accs)
     for k,v in loss.items():

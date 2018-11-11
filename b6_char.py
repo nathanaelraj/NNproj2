@@ -14,12 +14,26 @@ EMBEDDING_SIZE = 20
 
 
 batch_size = 128
-no_epochs = 100
+no_epochs = 400
 lr = 0.01
 
 tf.logging.set_verbosity(tf.logging.ERROR)
 seed = 10
 tf.set_random_seed(seed)
+
+def gru_model(x):
+    input_layer = tf.reshape(
+      tf.one_hot(x, 256), [-1, MAX_DOCUMENT_LENGTH, 256])
+
+    word_list = tf.unstack(input_layer, axis=1)
+
+    cell = tf.nn.rnn_cell.GRUCell(HIDDEN_SIZE)
+    _, encoding = tf.nn.static_rnn(cell, word_list, dtype=tf.float32)
+
+    logits = tf.layers.dense(encoding, MAX_LABEL, activation=None)
+
+    # TODO: make sure that dropout is not applied on testing
+    return logits, word_list
 
 def twolayer_model(x):
     with tf.variable_scope("foo" ):
@@ -122,15 +136,24 @@ def main():
     loss = {}
     test_accs = {}
     #word_vectors is the vector representation of each id
-    for method in [twolayer_model, lstm_model, vanilla_model]:
+    for method in [twolayer_model, vanilla_model, lstm_model, gru_model, 'grad_clipping']:
+    # for method in ['grad_clipping']:
         tf.reset_default_graph()
         x = tf.placeholder(tf.int64, [None, MAX_DOCUMENT_LENGTH])
         y_ = tf.placeholder(tf.int64)
-        m = str(method).split(' ')[1]
+        if method == 'grad_clipping':
+            m = 'grad_clipping With GRU'
+            logits, word_list = gru_model(x)
+            entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
+            train_op = chooseTrainOp(True, entropy)
+        else:
+            m = str(method).split(' ')[1]
+            logits, word_list = method(x)
+            entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
+            train_op = chooseTrainOp(False, entropy)
+
         print(m)
-        logits, word_list = method(x)
-        entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
-        train_op = chooseTrainOp(False, entropy)
+
         correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), y_ ), tf.float32)
         accuracy = tf.reduce_mean(correct_prediction)
 

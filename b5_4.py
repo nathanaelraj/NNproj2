@@ -14,7 +14,7 @@ EMBEDDING_SIZE = 20
 
 
 batch_size = 128
-no_epochs = 100
+no_epochs = 300
 lr = 0.01
 
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -84,7 +84,7 @@ def main():
     loss = {}
     test_accs = {}
     #word_vectors is the vector representation of each id
-    for p in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+    for p in [0.0, 0.2, 0.4, 0.6, 0.8]:
         tf.reset_default_graph()
         x = tf.placeholder(tf.int64, [None, MAX_DOCUMENT_LENGTH])
         y_ = tf.placeholder(tf.int64)
