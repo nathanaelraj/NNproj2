@@ -138,7 +138,7 @@ def main():
                 end += batch_size
                 if end > NUM_INPUT:
                     end = NUM_INPUT
-                word_vectors_, _, loss_  = sess.run([word_vectors, train_op, entropy], {x: x_train, y_: y_train, prob:p})
+                word_vectors_, _, loss_  = sess.run([word_vectors, train_op, entropy], {x: x_train[start:end], y_: y_train[start:end], prob:p})
             loss[p].append(loss_)
             acc = sess.run([accuracy], {x: x_test, y_: y_test, prob:0.0 })
             test_accs[p].append(acc[0])

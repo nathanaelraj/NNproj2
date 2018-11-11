@@ -2,7 +2,7 @@ import numpy as np
 import pandas
 import tensorflow as tf
 import csv
-import json
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -21,27 +21,13 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 seed = 10
 tf.set_random_seed(seed)
 
-def gru_model(x):
-    word_vectors = tf.contrib.layers.embed_sequence(
-      x, vocab_size=n_words, embed_dim=EMBEDDING_SIZE)
-
-    word_list = tf.unstack(word_vectors, axis=1)
-
-    cell = tf.nn.rnn_cell.GRUCell(HIDDEN_SIZE)
-    _, encoding = tf.nn.static_rnn(cell, word_list, dtype=tf.float32)
-
-    logits = tf.layers.dense(encoding, MAX_LABEL, activation=None)
-
-    # TODO: make sure that dropout is not applied on testing
-    return logits, word_list
-
-
 def twolayer_model(x):
     with tf.variable_scope("foo" ):
-        word_vectors = tf.contrib.layers.embed_sequence(
-          x, vocab_size=n_words, embed_dim=EMBEDDING_SIZE)
+        input_layer = tf.reshape(
+          tf.one_hot(x, 256), [-1, MAX_DOCUMENT_LENGTH, 256])
 
-        word_list = tf.unstack(word_vectors, axis=1)
+        word_list = tf.unstack(input_layer, axis=1)
+
         cell1 = tf.nn.rnn_cell.GRUCell(HIDDEN_SIZE)
         cell2 = tf.nn.rnn_cell.GRUCell(HIDDEN_SIZE)
         cell = tf.contrib.rnn.MultiRNNCell([cell1,cell2])
@@ -54,10 +40,10 @@ def twolayer_model(x):
 
 def lstm_model(x):
     with tf.variable_scope("foo" ):
-        word_vectors = tf.contrib.layers.embed_sequence(
-          x, vocab_size=n_words, embed_dim=EMBEDDING_SIZE)
+        input_layer = tf.reshape(
+          tf.one_hot(x, 256), [-1, MAX_DOCUMENT_LENGTH, 256])
 
-        word_list = tf.unstack(word_vectors, axis=1)
+        word_list = tf.unstack(input_layer, axis=1)
 
         cell = tf.nn.rnn_cell.BasicLSTMCell(HIDDEN_SIZE)
         _, encoding = tf.nn.static_rnn(cell, word_list, dtype=tf.float32)
@@ -67,10 +53,10 @@ def lstm_model(x):
 
 def vanilla_model(x):
     with tf.variable_scope("foo" ):
-        word_vectors = tf.contrib.layers.embed_sequence(
-          x, vocab_size=n_words, embed_dim=EMBEDDING_SIZE)
+        input_layer = tf.reshape(
+          tf.one_hot(x, 256), [-1, MAX_DOCUMENT_LENGTH, 256])
 
-        word_list = tf.unstack(word_vectors, axis=1)
+        word_list = tf.unstack(input_layer, axis=1)
 
         cell = tf.nn.rnn_cell.BasicRNNCell(HIDDEN_SIZE)
         _, encoding = tf.nn.static_rnn(cell, word_list, dtype=tf.float32)
@@ -78,41 +64,35 @@ def vanilla_model(x):
         logits = tf.layers.dense(encoding, MAX_LABEL, activation=None)
     return logits, word_list
 
-def data_read_words():
+def read_data_chars():
 
     x_train, y_train, x_test, y_test = [], [], [], []
 
     with open('train_medium.csv', encoding='utf-8') as filex:
         reader = csv.reader(filex)
         for row in reader:
-            x_train.append(row[2])
+            x_train.append(row[1])
             y_train.append(int(row[0]))
 
-    with open("test_medium.csv", encoding='utf-8') as filex:
+    with open('test_medium.csv', encoding='utf-8') as filex:
         reader = csv.reader(filex)
         for row in reader:
-            x_test.append(row[2])
+            x_test.append(row[1])
             y_test.append(int(row[0]))
 
     x_train = pandas.Series(x_train)
     y_train = pandas.Series(y_train)
     x_test = pandas.Series(x_test)
     y_test = pandas.Series(y_test)
+
+
+    char_processor = tf.contrib.learn.preprocessing.ByteProcessor(MAX_DOCUMENT_LENGTH)
+    x_train = np.array(list(char_processor.fit_transform(x_train)))
+    x_test = np.array(list(char_processor.transform(x_test)))
     y_train = y_train.values
     y_test = y_test.values
 
-    vocab_processor = tf.contrib.learn.preprocessing.VocabularyProcessor(
-      MAX_DOCUMENT_LENGTH)
-
-    x_transform_train = vocab_processor.fit_transform(x_train)
-    x_transform_test = vocab_processor.transform(x_test)
-    x_train = np.array(list(x_transform_train))
-    x_test = np.array(list(x_transform_test))
-
-    no_words = len(vocab_processor.vocabulary_)
-    print('Total words: %d' % no_words)
-
-    return x_train, y_train, x_test, y_test, no_words
+    return x_train, y_train, x_test, y_test
 
 def chooseTrainOp(useClipping, entropy):
     if useClipping:
@@ -136,29 +116,21 @@ def chooseTrainOp(useClipping, entropy):
 def main():
     global n_words
     #x_train is a list of ids corresponding to each word in the paragraph.
-    x_train, y_train, x_test, y_test, n_words = data_read_words()
+    x_train, y_train, x_test, y_test = read_data_chars()
     # print('y_train:', y_train.shape)
     # Create the model
     loss = {}
     test_accs = {}
     #word_vectors is the vector representation of each id
-    for method in [twolayer_model, vanilla_model, lstm_model, gru_model, 'grad_clipping']:
+    for method in [twolayer_model, lstm_model, vanilla_model]:
         tf.reset_default_graph()
         x = tf.placeholder(tf.int64, [None, MAX_DOCUMENT_LENGTH])
         y_ = tf.placeholder(tf.int64)
-
-
-        if method == 'grad_clipping':
-            m = 'grad_clipping With GRU'
-            logits, word_list = gru_model(x)
-            entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
-            train_op = chooseTrainOp(True, entropy)
-        else:
-            m = str(method).split(' ')[1]
-            logits, word_list = method(x)
-            entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
-            train_op = chooseTrainOp(False, entropy)
-
+        m = str(method).split(' ')[1]
+        print(m)
+        logits, word_list = method(x)
+        entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
+        train_op = chooseTrainOp(False, entropy)
         correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), y_ ), tf.float32)
         accuracy = tf.reduce_mean(correct_prediction)
 
@@ -188,25 +160,23 @@ def main():
             if e%10 == 0:
                 print('epoch: %d, entropy: %g'%(e, loss[m][e]), 'accuracy:', test_accs[m][e])
 
-    with open('b6_words_results.json') as fp:
-        json.save(fp, [loss,test_accs])
-    # print(loss)
-    # print(test_accs)
-    # for k,v in loss.items():
-    #     plt.figure("Entropy Vs Epochs")
-    #     plt.plot(range(no_epochs), v, label= str(k) )
-    #     plt.xlabel(str(no_epochs) + ' Epochs')
-    #     plt.ylabel('Entropy')
-    # plt.legend()
-    # plt.savefig('b6'+'lossvsepochs.png')
-    #
-    # for k,v in test_accs.items():
-    #     test_fig = plt.figure("Accuracy Vs Epochs")
-    #     plt.plot(range(no_epochs), v, label= str(k) )
-    #     plt.xlabel(str(no_epochs) + ' Epochs')
-    #     plt.ylabel('Accuracy')
-    # plt.legend()
-    # plt.savefig('b6'+'accvsepochs.png')
+    print(loss)
+    print(test_accs)
+    for k,v in loss.items():
+        plt.figure("Entropy Vs Epochs")
+        plt.plot(range(no_epochs), v, label= str(k) )
+        plt.xlabel(str(no_epochs) + ' Epochs')
+        plt.ylabel('Entropy')
+    plt.legend()
+    plt.savefig('b6char'+'lossvsepochs.png')
+
+    for k,v in test_accs.items():
+        test_fig = plt.figure("Accuracy Vs Epochs")
+        plt.plot(range(no_epochs), v, label= str(k) )
+        plt.xlabel(str(no_epochs) + ' Epochs')
+        plt.ylabel('Accuracy')
+    plt.legend()
+    plt.savefig('b6char'+'accvsepochs.png')
 
 
 if __name__ == '__main__':
