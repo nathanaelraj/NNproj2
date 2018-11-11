@@ -17,7 +17,7 @@ batch_size = 128
 no_epochs = 100
 lr = 0.01
 
-tf.logging.set_verbosity(tf.logging.ERROR)
+# tf.logging.set_verbosity(tf.logging.ERROR)
 seed = 10
 tf.set_random_seed(seed)
 
@@ -158,7 +158,7 @@ def main():
             logits, word_list = method(x)
             entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(y_, MAX_LABEL), logits=logits))
             train_op = chooseTrainOp(False, entropy)
-
+        print(m)
         correct_prediction = tf.cast(tf.equal(tf.argmax(logits, 1), y_ ), tf.float32)
         accuracy = tf.reduce_mean(correct_prediction)
 
@@ -188,25 +188,24 @@ def main():
             if e%10 == 0:
                 print('epoch: %d, entropy: %g'%(e, loss[m][e]), 'accuracy:', test_accs[m][e])
 
-    with open('b6_words_results.json') as fp:
-        json.save(fp, [loss,test_accs])
-    # print(loss)
-    # print(test_accs)
-    # for k,v in loss.items():
-    #     plt.figure("Entropy Vs Epochs")
-    #     plt.plot(range(no_epochs), v, label= str(k) )
-    #     plt.xlabel(str(no_epochs) + ' Epochs')
-    #     plt.ylabel('Entropy')
-    # plt.legend()
-    # plt.savefig('b6'+'lossvsepochs.png')
-    #
-    # for k,v in test_accs.items():
-    #     test_fig = plt.figure("Accuracy Vs Epochs")
-    #     plt.plot(range(no_epochs), v, label= str(k) )
-    #     plt.xlabel(str(no_epochs) + ' Epochs')
-    #     plt.ylabel('Accuracy')
-    # plt.legend()
-    # plt.savefig('b6'+'accvsepochs.png')
+
+    print(loss)
+    print(test_accs)
+    for k,v in loss.items():
+        plt.figure("Entropy Vs Epochs")
+        plt.plot(range(no_epochs), v, label= str(k) )
+        plt.xlabel(str(no_epochs) + ' Epochs')
+        plt.ylabel('Entropy')
+    plt.legend()
+    plt.savefig('b6'+'lossvsepochs.png')
+
+    for k,v in test_accs.items():
+        test_fig = plt.figure("Accuracy Vs Epochs")
+        plt.plot(range(no_epochs), v, label= str(k) )
+        plt.xlabel(str(no_epochs) + ' Epochs')
+        plt.ylabel('Accuracy')
+    plt.legend()
+    plt.savefig('b6'+'accvsepochs.png')
 
 
 if __name__ == '__main__':
